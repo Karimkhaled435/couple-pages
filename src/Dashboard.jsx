@@ -6,10 +6,6 @@ const supabase = createClient(
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5vZHdlbXFobmlpaGVwZWZrampsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzUyMzMwOCwiZXhwIjoyMDg5MDk5MzA4fQ.3nWlgR5XuyyrtObV0Uwv9WfUYsXHXqYYfDp4ljutyKY"
 );
 
-const FAWATERAK_API_KEY = "67cc15bd91387e48b7d59d60526f83c19ebde5886c8fa784af";
-const FAWATERAK_PROVIDER_KEY = "FAWATERAK.27356";
-const PRODUCT_ID = "15826";
-
 const glass = { background: "rgba(255,255,255,0.05)", backdropFilter: "blur(15px)", WebkitBackdropFilter: "blur(15px)", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 8px 32px rgba(0,0,0,0.3)", borderRadius: 20 };
 const inp = { width: "100%", padding: "12px 16px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.08)", color: "white", fontSize: 15, fontFamily: "'Cairo',sans-serif", outline: "none", boxSizing: "border-box" };
 const lbl = { display: "block", fontSize: 13, color: "#f9a8d4", marginBottom: 8, fontWeight: 600 };
@@ -96,7 +92,7 @@ export default function Dashboard() {
 
     setLoading(true);
     try {
-      // 1. ارفع الصور أول
+      // 1. ارفع الصور
       setLoadingMsg("بيرفع الصور...");
       const tempSlug = generateTempSlug();
       const imageUrls = await uploadImages(tempSlug);
@@ -118,7 +114,7 @@ export default function Dashboard() {
         temp_slug: tempSlug,
       };
 
-      // 3. احفظ البيانات في Supabase مؤقتاً
+      // 3. احفظ مؤقتاً في Supabase
       setLoadingMsg("بيجهز الدفع...");
       const token = Math.random().toString(36).substring(2, 18);
       const { error: tokenError } = await supabase.from("pending_pages").insert({
@@ -127,33 +123,12 @@ export default function Dashboard() {
       });
       if (tokenError) throw tokenError;
 
-      // 4. عمل invoice على Fawaterak
-      const invoiceRes = await fetch("https://app.fawaterk.com/api/v2/invoices/send", {
+      // 4. اطلب الـ invoice من الـ backend (مش مباشرة من Fawaterak)
+      setLoadingMsg("بيعمل صفحة الدفع...");
+      const invoiceRes = await fetch("/api/create-invoice", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${FAWATERAK_API_KEY}`,
-        },
-        body: JSON.stringify({
-          cartItems: [{
-            name: "Couple Page",
-            price: "205",
-            quantity: "1",
-          }],
-          cartTotal: "205",
-          currency: "EGP",
-          customer: {
-            first_name: loverName.trim(),
-            last_name: ".",
-            email: "customer@couplepage.app",
-            phone: "01000000000",
-          },
-          redirectionUrls: {
-            successUrl: `https://couple-pages.vercel.app/success?token=${token}`,
-            failUrl: `https://couple-pages.vercel.app?error=payment_failed`,
-            pendingUrl: `https://couple-pages.vercel.app?error=payment_pending`,
-          },
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, loverName: loverName.trim() }),
       });
 
       const invoiceData = await invoiceRes.json();
@@ -162,7 +137,7 @@ export default function Dashboard() {
         setLoadingMsg("بيحولك لصفحة الدفع...");
         window.location.href = invoiceData.data.url;
       } else {
-        throw new Error("مش قادر يعمل صفحة الدفع — حاول تاني");
+        throw new Error(invoiceData?.message || "مش قادر يعمل صفحة الدفع — حاول تاني");
       }
 
     } catch (err) {
@@ -303,7 +278,6 @@ export default function Dashboard() {
           <div style={{ background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 12, padding: "12px 16px", marginBottom: 16, color: "#fca5a5", fontSize: 14 }}>{error}</div>
         )}
 
-        {/* زرار الدفع */}
         <button onClick={handlePayment} disabled={loading} style={{ width: "100%", padding: "18px 0", borderRadius: 16, border: "none", background: loading ? "rgba(236,72,153,0.4)" : "linear-gradient(to right,#ec4899,#f43f5e)", color: "white", fontSize: 18, fontWeight: 800, cursor: loading ? "not-allowed" : "pointer", fontFamily: "'Cairo',sans-serif", marginBottom: 8, boxShadow: loading ? "none" : "0 4px 20px rgba(236,72,153,0.4)" }}>
           {loading ? `⏳ ${loadingMsg}` : "💳 ادفع وانشر صفحتك — 205 جنيه"}
         </button>
