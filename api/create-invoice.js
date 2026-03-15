@@ -28,10 +28,17 @@ export default async function handler(req, res) {
       }),
     });
 
-    const data = await response.json();
+    const text = await response.text();
+    console.log("Fawaterak raw response:", text);
+
+    let data;
+    try { data = JSON.parse(text); } catch { return res.status(500).json({ error: "Invalid JSON from Fawaterak", raw: text }); }
+
+    console.log("Fawaterak parsed:", JSON.stringify(data));
     return res.status(200).json(data);
 
   } catch (err) {
+    console.error("Invoice error:", err);
     return res.status(500).json({ error: err.message });
   }
 }
