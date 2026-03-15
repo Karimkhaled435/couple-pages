@@ -6,15 +6,18 @@ const supabase = createClient(
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5vZHdlbXFobmlpaGVwZWZrampsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzUyMzMwOCwiZXhwIjoyMDg5MDk5MzA4fQ.3nWlgR5XuyyrtObV0Uwv9WfUYsXHXqYYfDp4ljutyKY"
 );
 
-function generateSlug(name) {
-  const clean = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") || "page";
-  return `${clean}-${Math.random().toString(36).substring(2, 6)}`;
-}
+const FAWATERAK_API_KEY = "67cc15bd91387e48b7d59d60526f83c19ebde5886c8fa784af";
+const FAWATERAK_PROVIDER_KEY = "FAWATERAK.27356";
+const PRODUCT_ID = "15826";
 
 const glass = { background: "rgba(255,255,255,0.05)", backdropFilter: "blur(15px)", WebkitBackdropFilter: "blur(15px)", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 8px 32px rgba(0,0,0,0.3)", borderRadius: 20 };
 const inp = { width: "100%", padding: "12px 16px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.08)", color: "white", fontSize: 15, fontFamily: "'Cairo',sans-serif", outline: "none", boxSizing: "border-box" };
 const lbl = { display: "block", fontSize: 13, color: "#f9a8d4", marginBottom: 8, fontWeight: 600 };
 const sec = { fontSize: 16, fontWeight: 800, color: "#f9a8d4", marginBottom: 16, paddingBottom: 8, borderBottom: "1px solid rgba(255,77,166,0.3)" };
+
+function generateTempSlug() {
+  return `temp-${Math.random().toString(36).substring(2, 10)}`;
+}
 
 export default function Dashboard() {
   const [loverName, setLoverName] = useState("");
@@ -44,15 +47,13 @@ export default function Dashboard() {
     "عشان ببساطة.. أنتي روحي اللي بتنفس بيها.",
   ]);
 
-  // index 0 = profile, 1-5 = gallery
   const [images, setImages] = useState([null, null, null, null, null, null]);
   const [previews, setPreviews] = useState([null, null, null, null, null, null]);
   const profileInputRef = useRef(null);
   const galleryInputRef = useRef(null);
 
   const [loading, setLoading] = useState(false);
-  const [generatedLink, setGeneratedLink] = useState(null);
-  const [copied, setCopied] = useState(false);
+  const [loadingMsg, setLoadingMsg] = useState("");
   const [error, setError] = useState(null);
   const [activeSection, setActiveSection] = useState("basic");
 
@@ -86,26 +87,88 @@ export default function Dashboard() {
     return urls;
   };
 
-  const handleGenerate = async () => {
+  const handlePayment = async () => {
     setError(null);
-    if (!loverName.trim() || !password.trim() || !message.trim()) { setError("اكتب الاسم وكلمة السر والرسالة الأول"); return; }
+    if (!loverName.trim() || !password.trim() || !message.trim()) {
+      setError("اكتب الاسم وكلمة السر والرسالة الأول");
+      return;
+    }
+
     setLoading(true);
     try {
-      const slug = generateSlug(loverName);
-      const imageUrls = await uploadImages(slug);
-      const { error: dbError } = await supabase.from("pages").insert({
-        slug, lover_name: loverName.trim(), password: password.trim(),
-        message: message.trim(), song_url: songUrl.trim() || null,
-        images: imageUrls, secret_message: secretMessage.trim() || null,
-        cards: JSON.stringify(cards), timeline: JSON.stringify(timeline),
-        reasons: JSON.stringify(reasons), relation_date: relationDate || null,
+      // 1. ارفع الصور أول
+      setLoadingMsg("بيرفع الصور...");
+      const tempSlug = generateTempSlug();
+      const imageUrls = await uploadImages(tempSlug);
+
+      // 2. جمع البيانات
+      const pageData = {
+        lover_name: loverName.trim(),
+        password: password.trim(),
+        message: message.trim(),
+        song_url: songUrl.trim() || null,
+        images: imageUrls,
+        secret_message: secretMessage.trim() || null,
+        cards: JSON.stringify(cards),
+        timeline: JSON.stringify(timeline),
+        reasons: JSON.stringify(reasons),
+        relation_date: relationDate || null,
         song_title: songTitle.trim() || null,
         closing_line: closingLine.trim() || null,
+        temp_slug: tempSlug,
+      };
+
+      // 3. احفظ البيانات في Supabase مؤقتاً
+      setLoadingMsg("بيجهز الدفع...");
+      const token = Math.random().toString(36).substring(2, 18);
+      const { error: tokenError } = await supabase.from("pending_pages").insert({
+        token,
+        page_data: pageData,
       });
-      if (dbError) throw dbError;
-      setGeneratedLink(`${window.location.origin}/for/${slug}`);
-    } catch (err) { setError("حصل خطأ: " + err.message); }
-    finally { setLoading(false); }
+      if (tokenError) throw tokenError;
+
+      // 4. عمل invoice على Fawaterak
+      const invoiceRes = await fetch("https://app.fawaterk.com/api/v2/invoices/send", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${FAWATERAK_API_KEY}`,
+        },
+        body: JSON.stringify({
+          cartItems: [{
+            name: "Couple Page",
+            price: "205",
+            quantity: "1",
+          }],
+          cartTotal: "205",
+          currency: "EGP",
+          customer: {
+            first_name: loverName.trim(),
+            last_name: ".",
+            email: "customer@couplepage.app",
+            phone: "01000000000",
+          },
+          redirectionUrls: {
+            successUrl: `https://couple-pages.vercel.app/success?token=${token}`,
+            failUrl: `https://couple-pages.vercel.app?error=payment_failed`,
+            pendingUrl: `https://couple-pages.vercel.app?error=payment_pending`,
+          },
+        }),
+      });
+
+      const invoiceData = await invoiceRes.json();
+
+      if (invoiceData?.data?.url) {
+        setLoadingMsg("بيحولك لصفحة الدفع...");
+        window.location.href = invoiceData.data.url;
+      } else {
+        throw new Error("مش قادر يعمل صفحة الدفع — حاول تاني");
+      }
+
+    } catch (err) {
+      setError("حصل خطأ: " + err.message);
+      setLoading(false);
+    }
   };
 
   const sections = [
@@ -141,9 +204,9 @@ export default function Dashboard() {
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <div><label style={lbl}>اسم حبيبتك</label><input style={inp} value={loverName} onChange={e => setLoverName(e.target.value)} placeholder="مثلاً: ليلى، نور، سلمى..." /></div>
               <div><label style={lbl}>كلمة السر</label><input style={inp} value={password} onChange={e => setPassword(e.target.value)} placeholder="كلمة بينكم..." /><p style={{ fontSize: 11, color: "#aaa", marginTop: 4 }}>ابعتهالها كـ hint على واتساب</p></div>
-              <div><label style={lbl}>تاريخ بداية العلاقة</label><input type="date" style={{ ...inp, colorScheme: "dark" }} value={relationDate} onChange={e => setRelationDate(e.target.value)} /><p style={{ fontSize: 11, color: "#aaa", marginTop: 4 }}>هيتحسب منه العداد تلقائياً</p></div>
+              <div><label style={lbl}>تاريخ بداية العلاقة</label><input type="date" style={{ ...inp, colorScheme: "dark" }} value={relationDate} onChange={e => setRelationDate(e.target.value)} /></div>
               <div><label style={lbl}>رسالتك ليها 💌</label><textarea style={{ ...inp, minHeight: 120, resize: "vertical", lineHeight: 1.8 }} value={message} onChange={e => setMessage(e.target.value)} placeholder="اكتب كلامك من هنا..." /></div>
-              <div><label style={lbl}>الرسالة السرية 🔒 <span style={{ fontSize: 11, color: "#aaa", fontWeight: 400 }}>اختياري</span></label><textarea style={{ ...inp, minHeight: 100, resize: "vertical", lineHeight: 1.8 }} value={secretMessage} onChange={e => setSecretMessage(e.target.value)} placeholder="رسالة مخفية تظهر لما تضغط على الزرار السري..." /></div>
+              <div><label style={lbl}>الرسالة السرية 🔒 <span style={{ fontSize: 11, color: "#aaa", fontWeight: 400 }}>اختياري</span></label><textarea style={{ ...inp, minHeight: 100, resize: "vertical", lineHeight: 1.8 }} value={secretMessage} onChange={e => setSecretMessage(e.target.value)} placeholder="رسالة مخفية..." /></div>
               <div><label style={lbl}>الجملة الختامية ❤️</label><input style={inp} value={closingLine} onChange={e => setClosingLine(e.target.value)} /></div>
             </div>
           </div>
@@ -198,9 +261,8 @@ export default function Dashboard() {
           <div style={{ ...glass, padding: 24, marginBottom: 16 }}>
             <p style={sec}>الصور والأغنية 🎵</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-
               <div>
-                <label style={lbl}>الصورة الشخصية (بتظهر في الهيدر والـ locked screen)</label>
+                <label style={lbl}>الصورة الشخصية</label>
                 <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
                   <div onClick={() => profileInputRef.current?.click()} style={{ width: 90, height: 90, borderRadius: "50%", border: "2px dashed rgba(236,72,153,0.5)", cursor: "pointer", overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.2)" }}>
                     {previews[0] ? <img src={previews[0]} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: 28 }}>📷</span>}
@@ -237,23 +299,16 @@ export default function Dashboard() {
           </div>
         )}
 
-        {error && <div style={{ background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 12, padding: "12px 16px", marginBottom: 16, color: "#fca5a5", fontSize: 14 }}>{error}</div>}
-
-        <button onClick={handleGenerate} disabled={loading} style={{ width: "100%", padding: "16px 0", borderRadius: 16, border: "none", background: loading ? "rgba(236,72,153,0.4)" : "linear-gradient(to right,#ec4899,#f43f5e)", color: "white", fontSize: 18, fontWeight: 800, cursor: loading ? "not-allowed" : "pointer", fontFamily: "'Cairo',sans-serif", marginBottom: 16 }}>
-          {loading ? "⏳ بيتعمل..." : "💖 Generate My Page"}
-        </button>
-
-        {generatedLink && (
-          <div style={{ ...glass, padding: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-            <div style={{ minWidth: 0 }}>
-              <p style={{ fontSize: 11, color: "#f9a8d4", marginBottom: 4 }}>الـ link جاهز 🎉</p>
-              <p style={{ fontSize: 13, color: "white", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{generatedLink}</p>
-            </div>
-            <button onClick={() => { navigator.clipboard.writeText(generatedLink); setCopied(true); setTimeout(() => setCopied(false), 2000); }} style={{ flexShrink: 0, padding: "8px 16px", borderRadius: 10, border: "1px solid rgba(236,72,153,0.5)", background: "rgba(236,72,153,0.15)", color: "#f9a8d4", cursor: "pointer", fontFamily: "'Cairo',sans-serif", fontWeight: 700, fontSize: 13 }}>
-              {copied ? "✓ تم النسخ" : "نسخ"}
-            </button>
-          </div>
+        {error && (
+          <div style={{ background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 12, padding: "12px 16px", marginBottom: 16, color: "#fca5a5", fontSize: 14 }}>{error}</div>
         )}
+
+        {/* زرار الدفع */}
+        <button onClick={handlePayment} disabled={loading} style={{ width: "100%", padding: "18px 0", borderRadius: 16, border: "none", background: loading ? "rgba(236,72,153,0.4)" : "linear-gradient(to right,#ec4899,#f43f5e)", color: "white", fontSize: 18, fontWeight: 800, cursor: loading ? "not-allowed" : "pointer", fontFamily: "'Cairo',sans-serif", marginBottom: 8, boxShadow: loading ? "none" : "0 4px 20px rgba(236,72,153,0.4)" }}>
+          {loading ? `⏳ ${loadingMsg}` : "💳 ادفع وانشر صفحتك — 205 جنيه"}
+        </button>
+        <p style={{ textAlign: "center", fontSize: 12, color: "#aaa", marginBottom: 16 }}>بعد الدفع هيطلعلك رابط صفحتك فوراً ✨</p>
+
       </div>
       <style>{`input::placeholder,textarea::placeholder{color:rgba(255,255,255,0.3)}input:focus,textarea:focus{border-color:rgba(236,72,153,0.6)!important}::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:#1a0033}::-webkit-scrollbar-thumb{background:#ff4da6;border-radius:4px}`}</style>
     </div>
