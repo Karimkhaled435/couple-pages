@@ -4,14 +4,13 @@ export default async function handler(req, res) {
   const { token, loverName } = req.body;
 
   try {
-    const response = await fetch("https://app.fawaterk.com/api/v2/invoices/send", {
+    const response = await fetch("https://app.fawaterk.com/api/v2/createInvoiceLink", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer 67cc15bd91387e48b7d59d60526f83c19ebde5886c8fa784af`,
       },
       body: JSON.stringify({
-        cartItems: [{ name: "Couple Page", price: "205", quantity: "1" }],
         cartTotal: "205",
         currency: "EGP",
         customer: {
@@ -20,6 +19,9 @@ export default async function handler(req, res) {
           email: "customer@couplepage.app",
           phone: "01000000000",
         },
+        cartItems: [
+          { name: "Couple Page", price: "205", quantity: "1" }
+        ],
         redirectionUrls: {
           successUrl: `https://couple-pages.vercel.app/success?token=${token}`,
           failUrl: `https://couple-pages.vercel.app?error=payment_failed`,
@@ -29,12 +31,13 @@ export default async function handler(req, res) {
     });
 
     const text = await response.text();
-    console.log("Fawaterak raw response:", text);
+    console.log("Fawaterak response:", text);
 
     let data;
-    try { data = JSON.parse(text); } catch { return res.status(500).json({ error: "Invalid JSON from Fawaterak", raw: text }); }
+    try { data = JSON.parse(text); } catch {
+      return res.status(500).json({ error: "Invalid JSON", raw: text.substring(0, 200) });
+    }
 
-    console.log("Fawaterak parsed:", JSON.stringify(data));
     return res.status(200).json(data);
 
   } catch (err) {
