@@ -19,6 +19,23 @@ create table if not exists public.pages (
   closing_line text
 );
 
+-- لو الجدول كان موجود قبل كده بأعمدة ناقصة، الأوامر دي بتكمّلها (آمنة لو العمود موجود)
+alter table public.pages add column if not exists slug text;
+alter table public.pages add column if not exists lover_name text;
+alter table public.pages add column if not exists password text;
+alter table public.pages add column if not exists message text;
+alter table public.pages add column if not exists song_url text;
+alter table public.pages add column if not exists images text[] default '{}';
+alter table public.pages add column if not exists secret_message text;
+alter table public.pages add column if not exists cards text;
+alter table public.pages add column if not exists timeline text;
+alter table public.pages add column if not exists reasons text;
+alter table public.pages add column if not exists relation_date date;
+alter table public.pages add column if not exists song_title text;
+alter table public.pages add column if not exists closing_line text;
+alter table public.pages add column if not exists created_at timestamptz not null default now();
+create unique index if not exists pages_slug_key on public.pages (slug);
+
 -- الموقع بيتعامل مع الداتابيز من السيرفر فقط (service_role بيتخطى RLS)،
 -- فنقفل الجدول تماماً على أي وصول مباشر من المتصفح:
 alter table public.pages enable row level security;

@@ -1,4 +1,4 @@
-import { getSupabase, withRetry, sendError } from "./_lib/supabase.js";
+import { getSupabase, withRetry, sendError, fail } from "./_lib/supabase.js";
 
 // بيتحقق من كلمة السر على السيرفر وبيرجّع الصفحة كاملة (بدون كلمة السر) لو صح
 export default async function handler(req, res) {
@@ -26,6 +26,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ page: safe });
   } catch (err) {
     console.error("unlock error:", err);
-    return sendError(res, 500, "حصلت مشكلة في السيرفر، حاول تاني بعد شوية");
+    return fail(res, err, "read");
   }
 }

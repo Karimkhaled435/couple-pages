@@ -1,4 +1,4 @@
-import { getSupabase, generateSlug, withRetry, sendError, BUCKET } from "./_lib/supabase.js";
+import { getSupabase, generateSlug, withRetry, sendError, fail, BUCKET } from "./_lib/supabase.js";
 
 export const config = { api: { bodyParser: { sizeLimit: "4mb" } } };
 
@@ -17,13 +17,15 @@ async function ensureBucket(supabase) {
   const { data } = await supabase.storage.getBucket(BUCKET);
   if (data) return;
   // لو الـ bucket مش موجود اعمله Public
-  await supabase.storage.createBucket(BUCKET, { public: true });
+  const { error } = await supabase.storage.createBucket(BUCKET, { public: true });
+  if (error && !/already exists|duplicate/i.test(error.message || "")) throw error;
 }
 
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
   if (req.method !== "POST") return sendError(res, 405, "Method not allowed");
 
+  let step = "validate";
   try {
     const body = req.body || {};
     const loverName = str(body.lover_name, 100);
@@ -56,6 +58,7 @@ export default async function handler(req, res) {
       return { ext: m[1] === "jpeg" ? "jpg" : m[1], mime: `image/${m[1]}`, buffer };
     });
 
+    step = "config";
     const supabase = getSupabase();
     let slug = generateSlug(loverName);
 
@@ -63,6 +66,7 @@ export default async function handler(req, res) {
     const hasImages = parsedImages.some(Boolean);
     const imageUrls = [];
     if (hasImages) {
+      step = "upload";
       await ensureBucket(supabase);
       for (let i = 0; i < parsedImages.length; i++) {
         const img = parsedImages[i];
@@ -89,6 +93,7 @@ export default async function handler(req, res) {
       closing_line: str(body.closing_line, 300) || null,
     };
 
+    step = "insert";
     // لو الـ slug اتكرر (نادر) جرب واحد جديد
     for (let attempt = 0; attempt < 3; attempt++) {
       const { error } = await supabase.from("pages").insert({ slug, ...row });
@@ -99,7 +104,7 @@ export default async function handler(req, res) {
     return sendError(res, 500, "مقدرناش نعمل رابط للصفحة، حاول تاني");
   } catch (err) {
     console.error("create-page error:", err);
-    const status = err.status || 500;
-    return sendError(res, status, status === 500 ? "حصلت مشكلة في السيرفر، حاول تاني بعد شوية" : err.message);
+    if (err.status && err.status < 500) return sendError(res, err.status, err.message);
+    return fail(res, err, step);
   }
 }

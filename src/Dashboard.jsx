@@ -138,7 +138,8 @@ export default function Dashboard() {
       let data = null;
       try { data = await res.json(); } catch { /* non-JSON response */ }
       if (!res.ok || !data?.slug) {
-        throw new Error(data?.error || (res.status === 413 ? "الصور كبيرة قوي، جرب صور أصغر" : "مش قادر يعمل الصفحة — حاول تاني"));
+        const base = data?.error || (res.status === 413 ? "الصور كبيرة قوي، جرب صور أصغر" : "مش قادر يعمل الصفحة — حاول تاني");
+        throw new Error(base + (data?.hint ? ` — ${data.hint}` : "") + (data?.detail ? ` [${data.detail}]` : ""));
       }
 
       setCreatedUrl(`${window.location.origin}/for/${data.slug}`);

@@ -1,4 +1,4 @@
-import { getSupabase, withRetry, sendError } from "./_lib/supabase.js";
+import { getSupabase, withRetry, sendError, fail } from "./_lib/supabase.js";
 
 // بيرجّع بيانات الشاشة المقفولة فقط (الاسم + الصورة الشخصية) بدون كلمة السر
 export default async function handler(req, res) {
@@ -19,6 +19,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ lover_name: data.lover_name, profile_image: images[0] || null });
   } catch (err) {
     console.error("page error:", err);
-    return sendError(res, 500, "حصلت مشكلة في السيرفر، حاول تاني بعد شوية");
+    return fail(res, err, "read");
   }
 }
