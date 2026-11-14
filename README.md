@@ -1,17 +1,168 @@
-# React + Vite
+# Couple Pages 💕
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+موقع مجاني لعمل صفحة حب تفاعلية: تملأ الاستمارة، تاخد رابط، وتبعته لحبيبتك (بكلمة سر).
+مبني بـ **React + Vite** والـ API على **Vercel Functions** وقاعدة البيانات والصور على **Supabase**.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## المتطلبات
 
-## React Compiler
+| الأداة | ليه | السعر |
+|---|---|---|
+| حساب [GitHub](https://github.com) | تخزين الكود | مجاني |
+| حساب [Vercel](https://vercel.com) | استضافة الموقع والـ API | مجاني |
+| مشروع [Supabase](https://supabase.com) | قاعدة البيانات وتخزين الصور | مجاني |
+| [Node.js](https://nodejs.org) 20+ و Git | للتجربة المحلية والرفع | مجاني |
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+---
 
-## Expanding the ESLint configuration
+## أولاً: تجهيز Supabase (مرة واحدة)
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
-"# couple-pages" 
+1. افتح مشروعك على Supabase ← **SQL Editor** ← New query.
+2. انسخ محتوى الملف `supabase/setup.sql` والصقه واضغط **Run**.
+   (آمن تشغله أكتر من مرة، وبيقفل الجدول عن أي وصول مباشر من المتصفح.)
+3. من **Project Settings ← API** انسخ قيمتين:
+   - **Project URL** ← هتحطها في `SUPABASE_URL`
+   - **service_role key** ← هتحطه في `SUPABASE_SERVICE_KEY`
+
+> ⚠️ مفتاح `service_role` سري جداً: ما تحطوش في الكود ولا ترفعه على GitHub ولا تبعته لحد.
+> لو اتسرب اعمل له **Rotate** من نفس الصفحة فوراً.
+> (المفتاح القديم اللي كان في المشروع الأول لازم يتغير.)
+
+الـ bucket اللي بتتخزن فيه الصور اسمه `couple-images` وبيتعمل **تلقائياً** (Public) أول مرة حد يرفع صورة.
+
+---
+
+## ثانياً: رفع الكود على GitHub (مرة واحدة)
+
+1. اعمل Repository جديد على GitHub (فاضي، من غير README).
+2. في فولدر المشروع افتح Terminal:
+
+```bash
+git init
+git add .
+git commit -m "first commit"
+git branch -M main
+git remote add origin https://github.com/USERNAME/REPO.git
+git push -u origin main
+```
+
+الملف `.gitignore` بيمنع رفع `node_modules` و `.env` تلقائياً.
+
+---
+
+## ثالثاً: النشر على Vercel (مرة واحدة)
+
+1. من Vercel اضغط **Add New ← Project** ثم اختار الـ Repository.
+2. الإعدادات بتتحدد لوحدها (Framework: **Vite**، Build: `npm run build`، Output: `dist`).
+3. افتح **Environment Variables** وأضف:
+
+| الاسم | القيمة |
+|---|---|
+| `SUPABASE_URL` | رابط مشروع Supabase |
+| `SUPABASE_SERVICE_KEY` | مفتاح service_role |
+
+4. اضغط **Deploy**. بعد دقيقة هتاخد رابط زي `https://your-project.vercel.app`.
+5. جرّب: افتح الرابط، اعمل صفحة، وافتح الرابط اللي بيطلع لك.
+
+---
+
+## رابعاً: تحديث الموقع بعد أي تعديل 🔄
+
+### الطريقة العادية (الأسهل) — Git
+أي `push` على فرع `main` بيعمل نشر جديد **أوتوماتيك**:
+
+```bash
+git add .
+git commit -m "وصف التعديل"
+git push
+```
+
+تابع النشر من تبويب **Deployments** في Vercel (بياخد دقيقة تقريباً).
+
+### تجربة تعديل من غير ما تأثر على الموقع الشغال
+ارفع التعديل على فرع جديد، وVercel هيطلّع لك رابط تجريبي (Preview) تفتحه وتتأكد:
+
+```bash
+git checkout -b my-change
+git add . && git commit -m "تجربة"
+git push -u origin my-change
+```
+لو عجبك ادمجه في `main` (Pull Request على GitHub).
+
+### بدون GitHub — Vercel CLI
+```bash
+npm i -g vercel
+vercel login
+vercel --prod
+```
+
+### لو غيّرت متغيرات البيئة
+تغيير `SUPABASE_URL` أو `SUPABASE_SERVICE_KEY` **ما بيتطبقش** إلا بعد إعادة نشر:
+Deployments ← آخر Deployment ← النقط الثلاث ← **Redeploy**.
+
+### الرجوع لنسخة قديمة (Rollback)
+لو التحديث بوّظ حاجة: Deployments ← اختار نسخة كانت شغالة ← النقط الثلاث ← **Promote to Production**.
+
+---
+
+## التشغيل على جهازك (للتجربة)
+
+```bash
+npm install
+cp .env.example .env.local     # واملأ القيمتين
+npx vercel dev                 # بيشغّل الواجهة + الـ API معاً على localhost:3000
+```
+
+> `npm run dev` لوحده بيشغّل الواجهة فقط، وإنشاء الصفحات مش هيشتغل لأن الـ API مش موجود فيه.
+> أوامر مفيدة: `npm run lint` للفحص، `npm run build` لعمل نسخة الإنتاج.
+
+---
+
+## حل المشاكل الشائعة
+
+| المشكلة | السبب والحل |
+|---|---|
+| `The connection to the database timed out` | ضغط مؤقت على Supabase. الموقع بيعيد المحاولة 3 مرات لوحده. لو استمر: تأكد إن المشروع **Active** (مش Paused) وجرّب **Restart project** من Settings. |
+| «حصلت مشكلة في السيرفر» عند إنشاء الصفحة | غالباً متغيرات البيئة ناقصة أو غلط، أو ما اتعملش Redeploy بعد إضافتها. شوف Logs في Vercel ← Functions. |
+| `SUPABASE_URL أو SUPABASE_SERVICE_KEY مش متظبطين` | ضيف المتغيرين (القسم ثالثاً) واعمل Redeploy. |
+| «الصور كبيرة قوي» | الموقع بيصغّر الصور تلقائياً، بس لو رفعت 6 صور ضخمة ممكن يعدي حد 4MB للطلب. استخدم صور أصغر. |
+| الصور مش بتظهر في الصفحة | تأكد إن الـ bucket `couple-images` موجود وحالته **Public** (Storage ← Buckets). |
+| 404 عند عمل Refresh على `/for/...` | تأكد إن ملف `vercel.json` موجود كما هو. |
+| «مفيش صفحة بالـ link ده» | الرابط غلط، أو الصفحة اتحذفت من جدول `pages`. |
+
+---
+
+## هيكل المشروع
+
+```
+api/
+  create-page.js     إنشاء الصفحة: بيتحقق، بيرفع الصور، بيحفظ (مع إعادة محاولة تلقائية)
+  page.js            بيانات شاشة القفل فقط (الاسم + الصورة) بدون كلمة السر
+  unlock.js          التحقق من كلمة السر على السيرفر وإرجاع الصفحة
+  _lib/supabase.js   عميل Supabase (سيرفر فقط) + دوال مساعدة
+src/
+  Dashboard.jsx      استمارة الإنشاء + شاشة النجاح
+  CouplePage.jsx     صفحة الحبيبة (قفل ← محتوى)
+  BottomNav.jsx      شريط التنقل السفلي (الموبايل)
+  useScroll.js       ظهور الأقسام عند التمرير + تتبع القسم النشط
+  motion.css         كل الحركات (CSS فقط، بدون مكتبات)
+supabase/setup.sql   تجهيز قاعدة البيانات
+```
+
+## ملاحظات عن التصميم والحركة
+
+- **الشريط السفلي** بيظهر على الموبايل فقط (عرض أقل من 768px). في الاستمارة بيتنقل بين الأقسام الخمسة،
+  وفي صفحة الحبيبة بيتنقل بين (الرئيسية، أسبابي، ذكرياتنا، محطاتنا، رسالتي) وبيتحدّث تلقائياً مع التمرير.
+  لتغيير الأيقونات أو الأسماء عدّل `NAV_ITEMS` في `Dashboard.jsx` وقائمة `items` في `CouplePage.jsx`
+  (الأيقونات من [lucide.dev](https://lucide.dev/icons)).
+- **الحركات** كلها في `src/motion.css`: ظهور الأقسام عند التمرير (`.reveal`)، تدرج لوني متحرك للعناوين،
+  نبض القلب، لمعان الأزرار، رفع الكروت عند اللمس، عدّاد الوقت، شريط الحب، فقاعات الخلفية، وقصاصات القلوب عند النجاح.
+- الحركات بتتوقف تلقائياً لو المستخدم مفعّل **تقليل الحركة** في جهازه (`prefers-reduced-motion`).
+
+## الأمان
+
+- لا يوجد أي مفتاح سري في كود المتصفح؛ كل التعامل مع Supabase من `api/` فقط.
+- كلمة السر بتتفحص على السيرفر ولا تُرسل للمتصفح أبداً.
+- كلمات سر الصفحات مخزنة نصاً عادياً (للتوافق مع الصفحات القديمة) ولا يوجد حد لمحاولات التخمين،
+  وده مناسب لموقع صغير؛ لو كبر الموقع يُفضّل تشفيرها وإضافة حد للمحاولات.

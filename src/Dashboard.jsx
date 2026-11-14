@@ -1,19 +1,45 @@
 import { useState, useRef } from "react";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  "https://nodwemqhniihepefkjjl.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5vZHdlbXFobmlpaGVwZWZrampsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzUyMzMwOCwiZXhwIjoyMDg5MDk5MzA4fQ.3nWlgR5XuyyrtObV0Uwv9WfUYsXHXqYYfDp4ljutyKY"
-);
-
+import { Heart, Layers, Clock, MessageCircleHeart, Image as ImageIcon } from "lucide-react";
+import BottomNav from "./BottomNav";
 const glass = { background: "rgba(255,255,255,0.05)", backdropFilter: "blur(15px)", WebkitBackdropFilter: "blur(15px)", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 8px 32px rgba(0,0,0,0.3)", borderRadius: 20 };
 const inp = { width: "100%", padding: "12px 16px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.08)", color: "white", fontSize: 15, fontFamily: "'Cairo',sans-serif", outline: "none", boxSizing: "border-box" };
 const lbl = { display: "block", fontSize: 13, color: "#f9a8d4", marginBottom: 8, fontWeight: 600 };
 const sec = { fontSize: 16, fontWeight: 800, color: "#f9a8d4", marginBottom: 16, paddingBottom: 8, borderBottom: "1px solid rgba(255,77,166,0.3)" };
 
-function generateTempSlug() {
-  return `temp-${Math.random().toString(36).substring(2, 10)}`;
+// بيصغّر الصورة ويحولها لـ JPEG عشان الرفع يبقى سريع وما يحصلش timeout
+async function compressImage(file, maxSize = 1400, quality = 0.78) {
+  let bmp;
+  try { bmp = await createImageBitmap(file); }
+  catch { throw new Error("إحدى الصور مش مدعومة، جرب صورة JPG أو PNG"); }
+  const scale = Math.min(1, maxSize / Math.max(bmp.width, bmp.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bmp.width * scale));
+  canvas.height = Math.max(1, Math.round(bmp.height * scale));
+  canvas.getContext("2d").drawImage(bmp, 0, 0, canvas.width, canvas.height);
+  bmp.close?.();
+  return canvas.toDataURL("image/jpeg", quality);
 }
+
+function Confetti() {
+  const [pieces] = useState(() => Array.from({ length: 30 }, (_, i) => ({
+    id: i, s: ["❤️", "💖", "✨", "💕", "💗"][i % 5],
+    x: Math.round((Math.random() - 0.5) * 360), y: -Math.round(Math.random() * 280 + 60),
+    r: Math.round(Math.random() * 720 - 360), dl: (Math.random() * 0.35).toFixed(2),
+  })));
+  return (
+    <div className="confetti-wrap" aria-hidden="true">
+      {pieces.map(p => <span key={p.id} className="confetti" style={{ "--x": `${p.x}px`, "--y": `${p.y}px`, "--r": `${p.r}deg`, "--dl": `${p.dl}s` }}>{p.s}</span>)}
+    </div>
+  );
+}
+
+const NAV_ITEMS = [
+  { id: "basic", label: "الأساسيات", Icon: Heart },
+  { id: "cards", label: "الكروت", Icon: Layers },
+  { id: "timeline", label: "الزمن", Icon: Clock },
+  { id: "reasons", label: "الأسباب", Icon: MessageCircleHeart },
+  { id: "media", label: "الصور", Icon: ImageIcon },
+];
 
 export default function Dashboard() {
   const [loverName, setLoverName] = useState("");
@@ -52,6 +78,8 @@ export default function Dashboard() {
   const [loadingMsg, setLoadingMsg] = useState("");
   const [error, setError] = useState(null);
   const [activeSection, setActiveSection] = useState("basic");
+  const [createdUrl, setCreatedUrl] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   const handleProfileImage = (e) => {
     const file = e.target.files[0];
@@ -61,29 +89,20 @@ export default function Dashboard() {
     setImages(newImages); setPreviews(newPreviews);
   };
 
-  const handleGalleryImages = (e) => {
-    const files = Array.from(e.target.files).slice(0, 5);
+  const addGalleryFiles = (list) => {
+    const files = Array.from(list).filter(f => f.type.startsWith("image/")).slice(0, 5);
     const newImages = [...images]; const newPreviews = [...previews];
     files.forEach((file, i) => { newImages[i + 1] = file; newPreviews[i + 1] = URL.createObjectURL(file); });
     setImages(newImages); setPreviews(newPreviews);
   };
+  const handleGalleryImages = (e) => { addGalleryFiles(e.target.files); e.target.value = ""; };
 
-  const uploadImages = async (slug) => {
-    const urls = [];
-    for (let i = 0; i < images.length; i++) {
-      const file = images[i];
-      if (!file) continue;
-      const ext = file.name.split(".").pop();
-      const path = `${slug}/photo-${i}.${ext}`;
-      const { error: uploadError } = await supabase.storage.from("couple-images").upload(path, file, { upsert: true });
-      if (uploadError) throw uploadError;
-      const { data } = supabase.storage.from("couple-images").getPublicUrl(path);
-      urls.push(data.publicUrl);
-    }
-    return urls;
+  const goSection = (id) => {
+    setActiveSection(id);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handlePayment = async () => {
+  const handleCreate = async () => {
     setError(null);
     if (!loverName.trim() || !password.trim() || !message.trim()) {
       setError("اكتب الاسم وكلمة السر والرسالة الأول");
@@ -92,54 +111,38 @@ export default function Dashboard() {
 
     setLoading(true);
     try {
-      // 1. ارفع الصور
-      setLoadingMsg("بيرفع الصور...");
-      const tempSlug = generateTempSlug();
-      const imageUrls = await uploadImages(tempSlug);
+      setLoadingMsg("بيجهز الصور...");
+      const imageData = [];
+      for (const file of images) imageData.push(file ? await compressImage(file) : null);
 
-      // 2. جمع البيانات
-      const pageData = {
-        lover_name: loverName.trim(),
-        password: password.trim(),
-        message: message.trim(),
-        song_url: songUrl.trim() || null,
-        images: imageUrls,
-        secret_message: secretMessage.trim() || null,
-        cards: JSON.stringify(cards),
-        timeline: JSON.stringify(timeline),
-        reasons: JSON.stringify(reasons),
-        relation_date: relationDate || null,
-        song_title: songTitle.trim() || null,
-        closing_line: closingLine.trim() || null,
-        temp_slug: tempSlug,
-      };
-
-      // 3. احفظ مؤقتاً في Supabase
-      setLoadingMsg("بيجهز الدفع...");
-      const token = Math.random().toString(36).substring(2, 18);
-      const { error: tokenError } = await supabase.from("pending_pages").insert({
-        token,
-        page_data: pageData,
-      });
-      if (tokenError) throw tokenError;
-
-      // 4. اطلب الـ invoice من الـ backend (مش مباشرة من Fawaterak)
-      setLoadingMsg("بيعمل صفحة الدفع...");
-      const invoiceRes = await fetch("/api/create-invoice", {
+      setLoadingMsg("بيعمل صفحتك...");
+      const res = await fetch("/api/create-page", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, loverName: loverName.trim() }),
+        body: JSON.stringify({
+          lover_name: loverName.trim(),
+          password: password.trim(),
+          message: message.trim(),
+          song_url: songUrl.trim(),
+          images: imageData,
+          secret_message: secretMessage.trim(),
+          cards,
+          timeline,
+          reasons: reasons.map(r => r.trim()).filter(Boolean),
+          relation_date: relationDate,
+          song_title: songTitle.trim(),
+          closing_line: closingLine.trim(),
+        }),
       });
 
-      const invoiceData = await invoiceRes.json();
-
-      if (invoiceData?.data?.url) {
-        setLoadingMsg("بيحولك لصفحة الدفع...");
-        window.location.href = invoiceData.data.url;
-      } else {
-        throw new Error(invoiceData?.message || "مش قادر يعمل صفحة الدفع — حاول تاني");
+      let data = null;
+      try { data = await res.json(); } catch { /* non-JSON response */ }
+      if (!res.ok || !data?.slug) {
+        throw new Error(data?.error || (res.status === 413 ? "الصور كبيرة قوي، جرب صور أصغر" : "مش قادر يعمل الصفحة — حاول تاني"));
       }
 
+      setCreatedUrl(`${window.location.origin}/for/${data.slug}`);
+      setLoading(false);
     } catch (err) {
       setError("حصل خطأ: " + err.message);
       setLoading(false);
@@ -154,27 +157,59 @@ export default function Dashboard() {
     { id: "media", label: "الصور والأغنية", icon: "🎵" },
   ];
 
+  if (createdUrl) {
+    const copy = async () => {
+      try { await navigator.clipboard.writeText(createdUrl); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { window.prompt("انسخ الرابط:", createdUrl); }
+    };
+    return (
+      <div style={{ minHeight: "100vh", background: "linear-gradient(135deg,#1a0033,#4b0082,#2b004b)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Cairo',sans-serif", color: "white", padding: 16, direction: "rtl" }}>
+        <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet" />
+        <Confetti />
+        <div className="tab-enter" style={{ width: "100%", maxWidth: 420, textAlign: "center" }}>
+          <div className="heartbeat" style={{ fontSize: 64, marginBottom: 24 }}>🎉</div>
+          <h2 style={{ fontSize: 26, fontWeight: 800, color: "#f9a8d4", marginBottom: 8 }}>صفحتك جاهزة!</h2>
+          <p style={{ color: "#ccc", fontSize: 14, marginBottom: 32 }}>ابعت الرابط لحبيبتك وسيبها تكتشف ❤️</p>
+          <div style={{ ...glass, padding: 20, marginBottom: 16 }}>
+            <p style={{ fontSize: 12, color: "#f9a8d4", marginBottom: 8 }}>رابط صفحتك</p>
+            <p dir="ltr" style={{ fontSize: 13, fontWeight: 700, wordBreak: "break-all", marginBottom: 16 }}>{createdUrl}</p>
+            <button className="btn-press" onClick={copy} style={{ width: "100%", padding: "12px 0", borderRadius: 12, border: "none", background: copied ? "rgba(34,197,94,0.3)" : "linear-gradient(to right,#ec4899,#f43f5e)", color: "white", fontSize: 16, fontWeight: 800, cursor: "pointer", fontFamily: "'Cairo',sans-serif" }}>
+              {copied ? "✓ تم النسخ!" : "📋 انسخ الرابط"}
+            </button>
+          </div>
+          <button onClick={() => { window.location.href = createdUrl; }} style={{ width: "100%", padding: "12px 0", borderRadius: 12, border: "1px solid rgba(255,255,255,0.2)", background: "transparent", color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "'Cairo',sans-serif", marginBottom: 12 }}>
+            👀 شوف الصفحة
+          </button>
+          <button onClick={() => { window.location.href = "/"; }} style={{ background: "none", border: "none", color: "#ccc", fontSize: 13, cursor: "pointer", fontFamily: "'Cairo',sans-serif" }}>
+            اعمل صفحة تانية
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg,#1a0033 0%,#4b0082 50%,#2b004b 100%)", fontFamily: "'Cairo',sans-serif", color: "white", direction: "rtl", padding: "24px 16px 80px" }}>
+    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg,#1a0033 0%,#4b0082 50%,#2b004b 100%)", fontFamily: "'Cairo',sans-serif", color: "white", direction: "rtl", padding: "24px 16px 130px" }}>
       <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet" />
-      <div style={{ maxWidth: 680, margin: "0 auto" }}>
+      <div className="blob" style={{ width: 320, height: 320, background: "rgba(236,72,153,0.22)", top: -90, right: -90 }} />
+      <div className="blob blob--b" style={{ width: 280, height: 280, background: "rgba(168,85,247,0.22)", bottom: -70, left: -70 }} />
+      <div style={{ maxWidth: 680, margin: "0 auto", position: "relative", zIndex: 1 }}>
 
         <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div style={{ fontSize: 40, marginBottom: 8 }}>💕</div>
-          <h1 style={{ fontSize: 28, fontWeight: 800, background: "linear-gradient(to right,#f9a8d4,#fda4af,#d8b4fe)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", marginBottom: 4 }}>Couple Pages</h1>
+          <div className="heartbeat" style={{ fontSize: 40, marginBottom: 8 }}>💕</div>
+          <h1 className="grad-text" style={{ fontSize: 28, fontWeight: 800, marginBottom: 4 }}>Couple Pages</h1>
           <p style={{ fontSize: 13, color: "#ccc" }}>اعمل صفحة لحبيبتك في دقيقتين</p>
         </div>
 
-        <div style={{ display: "flex", gap: 8, marginBottom: 24, overflowX: "auto", paddingBottom: 4 }}>
+        <div className="top-tabs" style={{ display: "flex", gap: 8, marginBottom: 24, overflowX: "auto", paddingBottom: 4 }}>
           {sections.map(s => (
-            <button key={s.id} onClick={() => setActiveSection(s.id)} style={{ padding: "8px 16px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.15)", background: activeSection === s.id ? "linear-gradient(to right,#ec4899,#f43f5e)" : "rgba(255,255,255,0.05)", color: "white", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Cairo',sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
+            <button key={s.id} className="btn-press" onClick={() => setActiveSection(s.id)} style={{ padding: "8px 16px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.15)", background: activeSection === s.id ? "linear-gradient(to right,#ec4899,#f43f5e)" : "rgba(255,255,255,0.05)", color: "white", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Cairo',sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
               {s.icon} {s.label}
             </button>
           ))}
         </div>
 
         {activeSection === "basic" && (
-          <div style={{ ...glass, padding: 24, marginBottom: 16 }}>
+          <div className="tab-enter" style={{ ...glass, padding: 24, marginBottom: 16 }}>
             <p style={sec}>المعلومات الأساسية</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <div><label style={lbl}>اسم حبيبتك</label><input style={inp} value={loverName} onChange={e => setLoverName(e.target.value)} placeholder="مثلاً: ليلى، نور، سلمى..." /></div>
@@ -188,7 +223,7 @@ export default function Dashboard() {
         )}
 
         {activeSection === "cards" && (
-          <div style={{ ...glass, padding: 24, marginBottom: 16 }}>
+          <div className="tab-enter" style={{ ...glass, padding: 24, marginBottom: 16 }}>
             <p style={sec}>الكروت القابلة للقلب 🃏</p>
             {cards.map((card, i) => (
               <div key={i} style={{ marginBottom: 16, background: "rgba(0,0,0,0.2)", borderRadius: 12, padding: 16 }}>
@@ -203,7 +238,7 @@ export default function Dashboard() {
         )}
 
         {activeSection === "timeline" && (
-          <div style={{ ...glass, padding: 24, marginBottom: 16 }}>
+          <div className="tab-enter" style={{ ...glass, padding: 24, marginBottom: 16 }}>
             <p style={sec}>الخط الزمني 📸</p>
             {timeline.map((item, i) => (
               <div key={i} style={{ marginBottom: 20, background: "rgba(0,0,0,0.2)", borderRadius: 12, padding: 16 }}>
@@ -220,7 +255,7 @@ export default function Dashboard() {
         )}
 
         {activeSection === "reasons" && (
-          <div style={{ ...glass, padding: 24, marginBottom: 16 }}>
+          <div className="tab-enter" style={{ ...glass, padding: 24, marginBottom: 16 }}>
             <p style={sec}>أسباب الحب 🥺</p>
             {reasons.map((r, i) => (
               <div key={i} style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center" }}>
@@ -233,7 +268,7 @@ export default function Dashboard() {
         )}
 
         {activeSection === "media" && (
-          <div style={{ ...glass, padding: 24, marginBottom: 16 }}>
+          <div className="tab-enter" style={{ ...glass, padding: 24, marginBottom: 16 }}>
             <p style={sec}>الصور والأغنية 🎵</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
               <div>
@@ -249,7 +284,7 @@ export default function Dashboard() {
 
               <div>
                 <label style={lbl}>صور المعرض (لغاية 5 صور)</label>
-                <div onClick={() => galleryInputRef.current?.click()} style={{ border: "2px dashed rgba(236,72,153,0.4)", borderRadius: 12, padding: 20, textAlign: "center", cursor: "pointer" }}>
+                <div onClick={() => galleryInputRef.current?.click()} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); addGalleryFiles(e.dataTransfer.files); }} style={{ border: "2px dashed rgba(236,72,153,0.4)", borderRadius: 12, padding: 20, textAlign: "center", cursor: "pointer" }}>
                   <div style={{ fontSize: 24, marginBottom: 6 }}>🖼️</div>
                   <p style={{ fontSize: 14, color: "#ccc" }}><span style={{ color: "#f9a8d4", fontWeight: 700 }}>اضغط ترفع</span> أو اسحب هنا</p>
                 </div>
@@ -278,12 +313,13 @@ export default function Dashboard() {
           <div style={{ background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 12, padding: "12px 16px", marginBottom: 16, color: "#fca5a5", fontSize: 14 }}>{error}</div>
         )}
 
-        <button onClick={handlePayment} disabled={loading} style={{ width: "100%", padding: "18px 0", borderRadius: 16, border: "none", background: loading ? "rgba(236,72,153,0.4)" : "linear-gradient(to right,#ec4899,#f43f5e)", color: "white", fontSize: 18, fontWeight: 800, cursor: loading ? "not-allowed" : "pointer", fontFamily: "'Cairo',sans-serif", marginBottom: 8, boxShadow: loading ? "none" : "0 4px 20px rgba(236,72,153,0.4)" }}>
-          {loading ? `⏳ ${loadingMsg}` : "💳 ادفع وانشر صفحتك — 205 جنيه"}
+        <button className="btn-shine btn-press" onClick={handleCreate} disabled={loading} style={{ width: "100%", padding: "18px 0", borderRadius: 16, border: "none", background: loading ? "rgba(236,72,153,0.4)" : "linear-gradient(to right,#ec4899,#f43f5e)", color: "white", fontSize: 18, fontWeight: 800, cursor: loading ? "not-allowed" : "pointer", fontFamily: "'Cairo',sans-serif", marginBottom: 8, boxShadow: loading ? "none" : "0 4px 20px rgba(236,72,153,0.4)" }}>
+          {loading ? `⏳ ${loadingMsg}` : "💖 اعمل صفحتك مجاناً"}
         </button>
-        <p style={{ textAlign: "center", fontSize: 12, color: "#aaa", marginBottom: 16 }}>بعد الدفع هيطلعلك رابط صفحتك فوراً ✨</p>
+        <p style={{ textAlign: "center", fontSize: 12, color: "#aaa", marginBottom: 16 }}>هيطلعلك رابط صفحتك فوراً ✨</p>
 
       </div>
+      <BottomNav items={NAV_ITEMS} active={activeSection} onChange={goSection} ariaLabel="أقسام الصفحة" />
       <style>{`input::placeholder,textarea::placeholder{color:rgba(255,255,255,0.3)}input:focus,textarea:focus{border-color:rgba(236,72,153,0.6)!important}::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:#1a0033}::-webkit-scrollbar-thumb{background:#ff4da6;border-radius:4px}`}</style>
     </div>
   );
