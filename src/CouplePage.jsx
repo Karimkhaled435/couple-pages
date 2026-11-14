@@ -1,7 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, memo } from "react";
 import { House, MessageCircleHeart, Images, Route, Mail } from "lucide-react";
 import BottomNav from "./BottomNav";
 import { useRevealOnScroll, useScrollSpy, scrollToId } from "./useScroll";
+import TicketCard from "./TicketCard";
+import SwipeDeck from "./SwipeDeck";
+import ZoomViewer from "./ZoomViewer";
+import ReasonCard from "./ReasonCard";
 const SECTION_IDS = ["sec-home", "sec-reasons", "sec-gallery", "sec-timeline", "sec-message"];
 
 const defaultReasons = [
@@ -64,6 +68,41 @@ function useCountup(startDate) {
   return t;
 }
 
+const TIME_LABELS = ["سنة", "شهر", "يوم", "ساعة", "دقيقة", "ثانية"];
+
+// العدّاد في كومبوننت لوحده: بيتحدث كل ثانية من غير ما يعيد رسم الصفحة كلها (ده كان سبب تقطيع السكرول)
+function Countdown({ startDate }) {
+  const t = useCountup(startDate);
+  const values = [t.years, t.months, t.days, t.hours, t.minutes, t.seconds];
+  return (
+    <div className="cd">
+      {values.map((v, i) => (
+        <div key={i}>
+          <div key={v} className="tick" style={{ fontSize: 28, fontWeight: 800, color: "#f472b6" }}>{v ?? 0}</div>
+          <div style={{ fontSize: 12, color: "#ccc" }}>{TIME_LABELS[i]}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// قلوب طايرة بـ CSS بس: ثابتة العدد ومن غير React state، فمفيش إعادة رسم وقت التمرير
+const HEARTS = Array.from({ length: 12 }, (_, i) => ({
+  s: ["❤️", "💖", "✨", "💕", "💗", "💞"][i % 6],
+  l: `${(i * 8.3 + 4) % 96}vw`,
+  d: `${9 + (i * 1.7) % 6}s`,
+  dl: `${-(i * 1.3)}s`,
+  sc: (0.7 + (i % 4) * 0.25).toFixed(2),
+  dx: `${((i % 5) - 2) * 18}px`,
+}));
+const FloatingHearts = memo(function FloatingHearts() {
+  return (
+    <div className="fh" aria-hidden="true">
+      {HEARTS.map((h, i) => <span key={i} style={{ "--l": h.l, "--d": h.d, "--dl": h.dl, "--sc": h.sc, "--dx": h.dx }}>{h.s}</span>)}
+    </div>
+  );
+});
+
 export default function CouplePage({ slug }) {
   const [status, setStatus] = useState("loading");
   const [pageData, setPageData] = useState(null);
@@ -72,16 +111,12 @@ export default function CouplePage({ slug }) {
   const [pwMsg, setPwMsg] = useState("");
   const [unlocking, setUnlocking] = useState(false);
   const [isMusicPlaying, setIsMusicPlaying] = useState(false);
-  const [reason, setReason] = useState("اضغطي على الزرار عشان تعرفي...");
   const [showSecret, setShowSecret] = useState(false);
-  const [lightbox, setLightbox] = useState(null);
-  const [flipped, setFlipped] = useState({});
-  const [hearts, setHearts] = useState([]);
+  const [viewer, setViewer] = useState(null);
   const [cards, setCards] = useState([]);
   const [timeline, setTimeline] = useState([]);
   const [reasons, setReasons] = useState(defaultReasons);
   const audioRef = useRef(null);
-  const time = useCountup(pageData?.relation_date || pageData?.created_at);
   useRevealOnScroll(status);
   const [activeSec, setActiveSec] = useScrollSpy(SECTION_IDS, status === "unlocked");
   const goSec = (id) => {
@@ -104,18 +139,6 @@ export default function CouplePage({ slug }) {
     };
     fetchPage();
   }, [slug]);
-
-  useEffect(() => {
-    if (status !== "unlocked") return;
-    const symbols = ["❤️", "💖", "✨", "💕", "💗"];
-    const interval = setInterval(() => {
-      const id = Date.now() + Math.random();
-      const h = { id, symbol: symbols[Math.floor(Math.random() * symbols.length)], left: Math.random() * 100, duration: Math.random() * 5 + 4, size: Math.random() * 1.5 + 0.5 };
-      setHearts(prev => [...prev.slice(-20), h]);
-      setTimeout(() => setHearts(prev => prev.filter(x => x.id !== id)), h.duration * 1000);
-    }, 400);
-    return () => clearInterval(interval);
-  }, [status]);
 
   useEffect(() => {
     const songUrl = pageData?.song_url;
@@ -164,12 +187,7 @@ export default function CouplePage({ slug }) {
     }
   };
 
-  const generateReason = () => {
-    const list = reasons.length > 0 ? reasons : defaultReasons;
-    setReason(list[Math.floor(Math.random() * list.length)]);
-  };
-
-  const glass = { background: "rgba(255,255,255,0.05)", backdropFilter: "blur(15px)", WebkitBackdropFilter: "blur(15px)", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 8px 32px rgba(0,0,0,0.3)", borderRadius: 24 };
+  const glass = { background: "linear-gradient(160deg, rgba(255,255,255,0.09), rgba(255,255,255,0.04))", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 8px 32px rgba(0,0,0,0.3)", borderRadius: 24 };
 
   if (status === "loading") return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(135deg,#1a0033,#4b0082,#2b004b)", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -198,8 +216,8 @@ export default function CouplePage({ slug }) {
   if (status === "locked") return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(135deg,#1a0033,#4b0082,#2b004b)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Cairo',sans-serif", color: "white", padding: 16, position: "relative", overflow: "hidden" }}>
       <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet" />
-      <div className="blob" style={{ width: 300, height: 300, background: "rgba(236,72,153,0.2)", top: -80, right: -80 }} />
-      <div className="blob blob--b" style={{ width: 250, height: 250, background: "rgba(168,85,247,0.2)", bottom: -60, left: -60 }} />
+      <div className="blob" style={{ width: 300, height: 300, background: "radial-gradient(circle, rgba(236,72,153,0.34), transparent 70%)", top: -80, right: -80 }} />
+      <div className="blob blob--b" style={{ width: 250, height: 250, background: "radial-gradient(circle, rgba(168,85,247,0.34), transparent 70%)", bottom: -60, left: -60 }} />
 
       <div className="tab-enter" style={{ width: "100%", maxWidth: 380, textAlign: "center", position: "relative", zIndex: 1 }}>
         <div style={{ position: "relative", width: 140, height: 140, margin: "0 auto 24px" }}>
@@ -245,18 +263,12 @@ export default function CouplePage({ slug }) {
     ? new Date(pageData.relation_date).toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" })
     : null;
   const cardGradients = ["linear-gradient(135deg,#ec4899,#f43f5e)", "linear-gradient(135deg,#a855f7,#6366f1)", "linear-gradient(135deg,#fb7185,#ef4444)"];
-  const timeLabels = ["سنة", "شهر", "يوم", "ساعة", "دقيقة", "ثانية"];
-  const timeValues = [time.years, time.months, time.days, time.hours, time.minutes, time.seconds];
 
   return (
-    <div className="page-enter" style={{ minHeight: "100vh", background: "linear-gradient(135deg,#1a0033 0%,#4b0082 50%,#2b004b 100%)", fontFamily: "'Cairo',sans-serif", color: "white", overflowX: "hidden", direction: "rtl", paddingBottom: 130 }}>
+    <div className="page-enter" style={{ minHeight: "100dvh", fontFamily: "'Cairo',sans-serif", color: "white", overflowX: "clip", direction: "rtl", paddingBottom: 130 }}>
       <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet" />
 
-      <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0, overflow: "hidden" }}>
-        {hearts.map(h => (
-          <div key={h.id} style={{ position: "absolute", bottom: 0, left: `${h.left}vw`, fontSize: 20, transform: `scale(${h.size})`, animation: `floatUp ${h.duration}s linear forwards` }}>{h.symbol}</div>
-        ))}
-      </div>
+      <FloatingHearts />
 
       {isDirectAudio && (
         <button onClick={toggleMusic} style={{ position: "fixed", bottom: 24, left: 24, zIndex: 50, ...glass, padding: 16, borderRadius: "50%", fontSize: 24, cursor: "pointer", color: "white" }}>
@@ -269,7 +281,7 @@ export default function CouplePage({ slug }) {
         <div id="sec-home" className="reveal reveal--zoom" style={{ textAlign: "center", marginBottom: 40 }}>
           {profileImage && (
             <img src={profileImage} alt={pageData.lover_name}
-              style={{ width: 160, height: 160, borderRadius: "50%", objectFit: "cover", margin: "0 auto 16px", display: "block", border: "4px solid rgba(255,255,255,0.3)", animation: "pulseGlow 2s infinite alternate" }}
+              style={{ width: 160, height: 160, borderRadius: "50%", objectFit: "cover", margin: "0 auto 16px", display: "block", border: "4px solid rgba(255,255,255,0.3)", boxShadow: "0 0 36px rgba(255,77,166,0.55)" }}
               onError={e => e.target.style.display = "none"}
             />
           )}
@@ -285,36 +297,18 @@ export default function CouplePage({ slug }) {
 
         <div className="reveal" style={{ ...glass, padding: 24, marginBottom: 32 }}>
           <p style={{ fontSize: 20, fontWeight: 600, color: "#f9a8d4", marginBottom: 16, textAlign: "center" }}>بقالنا مع بعض:</p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12 }}>
-            {timeValues.map((v, i) => (
-              <div key={i} style={{ background: "rgba(0,0,0,0.2)", padding: 12, borderRadius: 16, textAlign: "center" }}>
-                <div key={v} className="tick" style={{ fontSize: 28, fontWeight: 800, color: "#f472b6" }}>{v ?? 0}</div>
-                <div style={{ fontSize: 12, color: "#ccc" }}>{timeLabels[i]}</div>
-              </div>
-            ))}
-          </div>
+          <Countdown startDate={pageData.relation_date || pageData.created_at} />
         </div>
 
         <div id="sec-reasons" className="reveal" style={{ ...glass, padding: 24, marginBottom: 32, textAlign: "center" }}>
           <h2 style={{ fontSize: 22, fontWeight: 800, color: "#f9a8d4", marginBottom: 16 }}>ليه بحبك؟ 🥺</h2>
-          <div style={{ background: "rgba(0,0,0,0.2)", padding: 16, borderRadius: 12, minHeight: 80, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
-            <p style={{ fontSize: 17 }}>{reason}</p>
-          </div>
-          <button onClick={generateReason} style={{ background: "linear-gradient(to right,#ec4899,#f43f5e)", padding: "8px 24px", borderRadius: 999, border: "none", color: "white", fontWeight: 800, fontSize: 15, cursor: "pointer", fontFamily: "'Cairo',sans-serif" }}>
-            سر جديد ✨
-          </button>
+          <ReasonCard reasons={reasons.length > 0 ? reasons : defaultReasons} />
         </div>
 
         {cards.length > 0 && (
-          <div className="reveal" style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 16, marginBottom: 32 }}>
+          <div className="reveal tickets">
             {cards.map((card, i) => (
-              <div key={i} className="lift" onClick={() => setFlipped(f => ({ ...f, [i]: !f[i] }))}
-                style={{ width: 112, height: 112, perspective: 1000, cursor: "pointer" }}>
-                <div style={{ width: "100%", height: "100%", position: "relative", transformStyle: "preserve-3d", transition: "transform 0.6s cubic-bezier(0.4,0.2,0.2,1)", transform: flipped[i] ? "rotateY(180deg)" : "none" }}>
-                  <div style={{ position: "absolute", inset: 0, backfaceVisibility: "hidden", background: "rgba(255,255,255,0.05)", backdropFilter: "blur(15px)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 14, textAlign: "center", padding: 8 }}>{card.front}</div>
-                  <div style={{ position: "absolute", inset: 0, backfaceVisibility: "hidden", background: card.gradient || cardGradients[i % 3], borderRadius: 16, transform: "rotateY(180deg)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 13, textAlign: "center", padding: 8 }}>{card.back}</div>
-                </div>
-              </div>
+              <TicketCard key={i} index={i} front={card.front} back={card.back} gradient={card.gradient || cardGradients[i % 3]} />
             ))}
           </div>
         )}
@@ -332,25 +326,8 @@ export default function CouplePage({ slug }) {
         {/* Gallery — up to 5 images in responsive grid */}
         {galleryImages.length > 0 && (
           <div id="sec-gallery" className="reveal" style={{ ...glass, padding: 24, marginBottom: 32, textAlign: "center" }}>
-            <h2 style={{ fontSize: 22, fontWeight: 800, color: "#f9a8d4", marginBottom: 24 }}>أحلى ذكرياتنا 🖼️</h2>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 12 }}>
-              {galleryImages.map((src, i) => (
-                <div key={i} onClick={() => setLightbox(src)}
-                  style={{
-                    borderRadius: 12, overflow: "hidden", height: 160,
-                    border: "1px solid rgba(255,255,255,0.2)", cursor: "pointer",
-                    // الصورة الأخيرة لو عددهم فردي تاخد عرض كامل
-                    gridColumn: galleryImages.length % 2 !== 0 && i === galleryImages.length - 1 ? "span 2" : "auto"
-                  }}>
-                  <img src={src} alt={`صورة ${i + 1}`}
-                    style={{ width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.5s" }}
-                    onMouseEnter={e => e.target.style.transform = "scale(1.08)"}
-                    onMouseLeave={e => e.target.style.transform = "scale(1)"}
-                    onError={e => e.target.parentElement.style.display = "none"}
-                  />
-                </div>
-              ))}
-            </div>
+            <h2 style={{ fontSize: 22, fontWeight: 800, color: "#f9a8d4", marginBottom: 16 }}>أحلى ذكرياتنا 🖼️</h2>
+            <SwipeDeck images={galleryImages} onOpen={(i) => setViewer(i)} />
           </div>
         )}
 
@@ -422,16 +399,11 @@ export default function CouplePage({ slug }) {
         ]}
       />
 
-      {lightbox && (
-        <div className="fade-in" onClick={() => setLightbox(null)} style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.92)", backdropFilter: "blur(10px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <button style={{ position: "absolute", top: 24, right: 24, fontSize: 40, color: "white", background: "none", border: "none", cursor: "pointer" }}>×</button>
-          <img src={lightbox} className="zoom-in" alt="" style={{ maxWidth: "95%", maxHeight: "85vh", borderRadius: 16, objectFit: "contain" }} />
-        </div>
+      {viewer !== null && galleryImages.length > 0 && (
+        <ZoomViewer images={galleryImages} index={Math.min(viewer, galleryImages.length - 1)} onClose={() => setViewer(null)} />
       )}
 
       <style>{`
-        @keyframes floatUp{0%{transform:translateY(0) scale(0.5) rotate(0deg);opacity:0}10%{opacity:0.6}90%{opacity:0.6}100%{transform:translateY(-100vh) scale(1.5) rotate(360deg);opacity:0}}
-        @keyframes pulseGlow{0%{box-shadow:0 0 20px rgba(255,77,166,0.4)}100%{box-shadow:0 0 40px rgba(255,77,166,0.8),0 0 20px rgba(255,255,255,0.3)}}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.7}}
       `}</style>
     </div>

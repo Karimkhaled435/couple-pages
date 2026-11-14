@@ -1,1 +1,20 @@
 @import "tailwindcss";
+
+/* خلفية داكنة ثابتة: بتمنع أي خط أو مساحة بيضاء وقت الـ scroll أو الـ overscroll أو لما شريط المتصفح يتحرك */
+html {
+  background: #1a0033;
+  color-scheme: dark;
+  overscroll-behavior-y: none;
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: linear-gradient(135deg, #1a0033 0%, #4b0082 50%, #2b004b 100%);
+  background-color: #1a0033;
+}
+#root { min-height: 100vh; min-height: 100dvh; }
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #1a0033; }
+::-webkit-scrollbar-thumb { background: #6b21a8; border-radius: 3px; }
